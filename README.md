@@ -13,7 +13,7 @@
 
 ### 6.2.2 单复数与量词
 - **R6-04** 严禁在代码中使用 `if (count > 1)` 等逻辑判断单复数并拼接后缀（如加 `s`）。
-- **R6-05** 必须在文本表内使用语法选择器（如 ICU `plural` ）来处理单复数，代码只传入代表数量的变量。
+- **R6-05** 必须在文本表内使用语法选择器（如 ICU `plural` 或引擎对应的 Smart Strings 功能）来处理单复数，代码只传入代表数量的变量。
 - **R6-06** 对于无需处理复数词尾的语言（如中、日、韩），应直接在模板中嵌入正确的量词（如“把”、“个”、“개”），不依赖代码拼接。
 
 ### 6.2.3 性别
@@ -23,10 +23,12 @@
 ### 6.2.4 韩语助词
 - **R6-09** 当句子需要插入玩家自定义名称（或未知结尾的变量）并带有韩语助词时，程序必须在运行时判断前一个字符的 Unicode 收音，动态计算出正确的助词变量（如 `이/가`、`을/를`），并与名字一起传入文本表。
 
-### 6.2.5 数字、日期与单位格式
-- **R6-10** 严禁手动截取数字、手动添加千分位逗号（`,`）或小数点，必须将原始数值交由本地化引擎自动格式化。
-- **R6-11** 严禁写死日期格式（如 `YYYY-MM-DD`），必须使用引擎的日期格式化 API，由系统根据目标语言习惯输出。
-- **R6-12** 单位（如“里”、“斤”、“度”）必须与数值一起作为格式化单元处理（如 ICU `::measure-unit`），严禁将单位翻译与数值手动拼接连结。
+### 6.2.5 数字、日期、时间与货币格式
+- **R6-10** 严禁手动截取数字或写死分隔符（如手动加逗号 `,` 或小数点 `.`），必须将原始数值交由本地化引擎自动格式化。
+- **R6-11** 严禁在代码或UI中写死日期和时间的格式。日期顺序（如美式 `mm/dd/yyyy`，中式 `yyyy-mm-dd`）以及12/24小时制，必须由文本表或本地化配置决定。
+- **R6-12** 货币符号（`$`、`€`、`¥`、`两`）的位置因语言而异（前置或后置），严禁在代码中硬编码拼接，必须由格式化引擎处理。
+- **R6-13** 涉及真实货币时，必须根据目标语言/地区的汇率，在代码层或配置表中进行**数值近似换算**，绝不直接将原货币数值套用目标货币符号。
+- **R6-14** 序数词（如第1、第2）必须使用专门的语法选择器（如 ICU `selectordinal`），严禁在代码中写死英文的 `st/nd/rd/th` 或其他语言的后缀。
 
 ## 6.3 前作发生了什么
 
@@ -41,6 +43,7 @@
 ### 6.3.3 韩语与格式问题
 **问题编号-#31** （韩语玩家名加错助词，产生极强机翻感）
 **问题编号-#34** （代码写死日期格式，导致海外玩家看到非本地习惯的日期）
+**问题编号-#38** （排行榜名次后缀硬编码 `th`，导致法文版出现语法错误）
 
 ## 6.4 正确与错误示范
 
@@ -116,7 +119,6 @@ else
 }
 msg = pronoun + "的内力深不可测。";
 ```
-
 - 正确写法：
 
 文本表（中文）：
@@ -156,31 +158,57 @@ MSG_MEET_MASTER = {player_name}{josa} 스승을 만났습니다.
 ```
 > 若名字是“令狐冲”，传入 `josa="가"`；若名字是“岳不群”，传入 `josa="이"`。
 
-### 6.4.5 数字、日期与单位格式
+### 6.4.5 数字、日期、时间、货币与序数词格式
 
-**示例：轻功飞行距离与时间记录**
+**示例：客栈消费账单与江湖悬赏令**
 
-- 错误写法：手动截取数字并拼接固定单位。
+- **中文原文**：大侠于 2023年10月5日 14时30分 在客栈消费，购买上等女儿红 2 坛，共计 15,631.87 两银子。目前你在武林悬赏榜上排名第 3。
+- **错误写法**：手动截取数字、硬编码格式和货币符号、强行拼接序数词。
 ```csharp
-// 错误：写死格式，欧元区玩家会看懵
-msg = "今日飞行距离：" + distance.ToString("0.0") + " 里，耗时 " + hours + "时" + minutes + "分。";
-```
-- 正确写法：
+// 错误 1：写死日期格式，海外玩家看懵
+string dateStr = year + "年" + month + "月" + day + "日 " + hour + "时" + minute + "分";
 
-文本表（中文）：
-```icu
-MSG_FLIGHT_RECORD = 今日飞行距离：{distance, number, ::measure-unit/length-kilometer}，耗时 {time_spent, date, ::mmss}。
-```
+// 错误 2：写死千分位和小数点（如果到了德语环境，逗号和点应该是反的）
+string moneyStr = "$" + amount.ToString("N2"); 
 
-文本表（英文）：
-```icu
-MSG_FLIGHT_RECORD = Flight distance today: {distance, number, ::measure-unit/length-mile}, time taken {time_spent, date, ::mmss}.
+// 错误 3：强行拼写序数词后缀，遇上法语 2e 或日文 3日 直接崩溃
+string rankStr = rank + (rank == 1 ? "st" : (rank == 2 ? "nd" : (rank == 3 ? "rd" : "th")));
+
+msg = "大侠于 " + dateStr + " 在客栈消费，共计 " + moneyStr + "。排行榜排名：" + rankStr;
 ```
-代码传入原始数值和时间：
+- **正确写法**：
+
+**程序层（伪代码）**：
+代码只负责传原始数据和换算后的数值，由本地化库处理格式。
 ```csharp
-Localization.Get("MSG_FLIGHT_RECORD", new { distance = 12.5, time_spent = flightDuration });
+Localization.Get("MSG_INN_BILL", new { 
+    date = DateTime.Now,     
+    item = "女儿红",
+    count = 2,
+    amount = convertedPrice, // 换算后的本地化货币数值
+    rank = 3                 // 传入整数排名
+});
 ```
-> 引擎会自动将 `distance` 格式化为 `12.5` 或 `12,5`（视语言而定），并自动带上 `km` 或 `mile`；时间也会按目标语言的习惯表达。
+
+**文本表配置**：
+
+中文文本表 (zh-CN)：
+```icu
+MSG_INN_BILL = 大侠于 {date, date, medium} {date, time, short} 在客栈消费，购买{item} {count} 坛，共计 {amount, number, ::currency/CNY}。目前你在武林悬赏榜上排名第 {rank, selectordinal, other {#}}。
+```
+*(中文引擎渲染结果：...共计 ¥15,631.87。目前你在武林悬赏榜上排名第 3。)*
+
+英文文本表 (en-US)：
+```icu
+MSG_INN_BILL = You spent {amount, number, ::currency/USD} on {count} {item} at the inn on {date, date, short} at {date, time, short}. You are currently ranked {rank, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} on the martial arts bounty board.
+```
+*(英文引擎渲染结果：...on 10/5/23 at 2:30 PM. You are currently ranked 3rd... **注意：日期格式变为 mm/dd/yyyy，使用12小时制，货币前置且被换算为美元，序数词自动变为 3rd。**)*
+
+日文文本表 (ja-JP)：
+```icu
+MSG_INN_BILL = {date, date, ::yyyy年MM月dd日} {date, time, ::HH:mm} に宿屋で{item}を{count}本購入し、合計 {amount, number, ::currency/JPY} を支払いました。現在の武林懸賞榜の順位は {rank, selectordinal, other {#位}} です。
+```
+*(日文引擎渲染结果：...合計 ￥1,250,550 を支払いました。...順位は 3位 です。 **注意：日期变为 yyyy年MM月dd日，24小时制，货币后置，序数词使用日式“位”。**)*
 
 ## 6.5 检查清单
 
@@ -189,7 +217,9 @@ Localization.Get("MSG_FLIGHT_RECORD", new { distance = 12.5, time_spent = flight
 ☐ 检查代码，是否有根据性别 `if-else` 拼凑代词的情况？</br>
 ☐ 检查韩语环境，插入玩家自定义名称时，助词是否由程序动态计算？</br>
 ☐ 检查代码，数字是否直接使用了 `.ToString()` 而没有走本地化格式化 API？</br>
-☐ 检查日期和单位，是否直接硬编码了格式符号，而没有交由本地化引擎处理？
+☐ 检查日期、时间、货币符号，是否直接硬编码了格式，而没有交由本地化引擎处理？</br>
+☐ 检查序数词（如第几名），是否使用了 `selectordinal` 等引擎特性，而非手动拼接后缀？</br>
+☐ 如果游戏涉及真实货币换算，检查代码或配置表中是否处理了汇率？
 
 ## 6.6 参考文献
 
