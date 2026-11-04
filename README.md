@@ -85,7 +85,6 @@ Localization.Get("MSG_GET_LOOT", new { book_name = currentBook, count = silverAm
 
 - 错误写法：在代码里判断单复数并拼接。
 ```csharp
-// 极其错误的写法：强行拼后缀
 msg = "You found " + count + " throwing dart" + (count > 1 ? "s." : ".");
 ```
 - 正确写法：
