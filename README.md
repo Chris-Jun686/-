@@ -39,6 +39,7 @@
 <img width="600" height="300" alt="LQA-006" src="https://github.com/user-attachments/assets/389fb486-549d-4106-9dba-35aa5de9e59f" />
 
 > "__ has", "___'s core" 由于英文未设置变量，主语处空缺
+> 对应R6-01, R6-03
 
 ### 6.3.2 单复数问题
 
@@ -47,6 +48,7 @@
 <img width="600" height="300" alt="LQA-021" src="https://github.com/user-attachments/assets/e5aaee9f-89c6-4837-8f42-e0d0e5879165" />
 
 > "1points" 由于拼接/硬编码，导致缺少空隔以及单复数、语法错误
+> 对应R6-04,R6-06
 
 ## 6.4 正确与错误示范
 
@@ -211,6 +213,25 @@ MSG_INN_BILL = You spent {amount, number, ::currency/USD} on {count} {item} at t
 MSG_INN_BILL = {date, date, ::yyyy年MM月dd日} {date, time, ::HH:mm} に宿屋で{item}を{count}本購入し、合計 {amount, number, ::currency/JPY} を支払いました。現在の武林懸賞榜の順位は {rank, selectordinal, other {#位}} です。
 ```
 *(日文引擎渲染结果：...合計 ￥1,250,550 を支払いました。...順位は 3位 です。 **注意：日期变为 yyyy年MM月dd日，24小时制，货币后置，序数词使用日式“位”。**)*
+
+> 使用Unity时需注意
+
+**用 Smart Strings 替代字符串拼接**
+*   在 String Table 中，使用花括号 `{变量名}` 作为命名占位符（对应 R6-01）。
+*   利用 Smart Strings 强大的格式化语法，直接在文本表中处理语法：
+    *   **单复数（以英文为例）**：使用 `{count:plural:one{# dart}|other{# darts}}`。此时如果传 `count=1`，会渲染为 `1 dart`；传 `count=5`，会渲染为 `5 darts`。如果是中文文本表，因为中文名词无词形变化，直接写 `{count} 枚飞镖` 即可，不需要写 `plural` 分支。
+    *   **性别**：使用 `{gender:select:male{他}|female{她}|other{此人}}`（对应 R6-07、R6-08）。
+    *   **日期与时间**：使用 `{date:date:medium}` 或 `{date:time:short}`。
+    *   **数字与货币**：使用 `{amount:number:currency(CNY)}`，引擎会自动处理千分位、小数点和货币符号（对应 R6-10、R6-12）。
+    *   **序数词**：使用 `{rank:ordinal}`（对应 R6-14），例如在英文下会自动把 `3` 渲染为 `3rd`。
+*   代码只需按变量名传参，不再需要 `if-else` 或 `+` 号。
+  
+**针对韩语助词的补充方案**
+*   Unity 原生的 Smart Strings 不支持自动计算韩语助词（收音判断）。开发者需要编写一个简单的 C# 工具类（如 `KoreanParticleResolver`），在代码层根据玩家名字（`{player_name}`）的最后一个 Unicode 字符计算出正确的助词（如 `이` 或 `가`）。
+*   然后将该助词作为独立的变量 `{josa}` 与名字一起传入：`{player_name}{josa} 스승을 만났습니다.`。
+
+**关于货币的汇率换算**
+*   Smart Strings 的 `currency` 格式化只能改变符号和排版格式，无法改变数值大小。如果游戏需要将“10 两银子”在英文版显示为“$10”，在日文版显示为“¥160”，必须在将数值传给 Smart String 之前，在 C# 逻辑层（或配置表中）乘以对应的汇率系数（对应 R6-13）。
 
 ## 6.5 检查清单
 
